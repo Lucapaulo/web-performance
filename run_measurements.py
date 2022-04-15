@@ -16,17 +16,15 @@ dnsproxy_dir = "/home/ubuntu/dnsproxy/"
 # download top list
 
 # t = Tranco(cache=True, cache_dir='.tranco')
-# tranco_list = t.list(date='2022-02-24')
-# pages = tranco_list.top(13)
+# tranco_list = t.list(date='2022-12-04')
+# pages = tranco_list.top(10)
 # avoid initial redirects (not necessary for twitter)
 # pages = [f'www.{page}' for page in pages]
 # pages[pages.index('www.twitter.com')] = 'twitter.com'
-# pages.remove('www.qq.com')
 
 # just manually get pages list so the domain does not need to be resolved each time
-pages = ['www.google.com', 'www.netflix.com', 'www.youtube.com', 'www.facebook.com', 'www.microsoft.com', 'twitter.com',
-         'www.instagram.com', 'www.baidu.com', 'www.linkedin.com', 'www.apple.com', 'www.wikipedia.org',
-         'www.amazon.com']
+pages = ['www.google.com', 'www.youtube.com', 'www.facebook.com', 'www.netflix.com', 'www.microsoft.com',
+         'www.instagram.com', 'twitter.com', 'www.baidu.com', 'www.linkedin.com', 'www.wikipedia.org']
 
 # performance elements to extract
 measurement_elements = (
@@ -134,7 +132,6 @@ def perform_page_load(page, cache_warming=0):
     return pl_status
 
 
-
 def create_measurements_table():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS measurements (
@@ -203,6 +200,19 @@ def create_qlogs_table():
     db.commit()
 
 
+def create_dns_metrics_table():
+    cursor.execute(
+        """
+            CREATE TABLE IF NOT EXISTS dns_metrics (
+                measurement_id string,
+                metric string,
+                FOREIGN KEY (measurement_id) REFERENCES measurements(id)
+            );
+            """
+    )
+    db.commit()
+
+
 def insert_performance(page, performance, timestamp, cache_warming=0, error=''):
     performance['protocol'] = protocol
     performance['server'] = server
@@ -250,6 +260,13 @@ def insert_lookup(uid, domain, elapsed, status, answer):
     db.commit()
 
 
+def insert_dns_metric(uid, metric):
+    cursor.execute("""
+    INSERT INTO dns_metrics VALUES (?,?);
+    """, (uid, metric))
+    db.commit()
+
+
 def insert_lookups(uid):
     with open("dnsproxy.log", "r") as logs:
         lines = logs.readlines()
@@ -288,6 +305,8 @@ def insert_lookups(uid):
                     elapsed = re.search('in (.*)s\\.', line)
                     factor = 1000.0
                 elapsed = float(elapsed.group(1)) * factor
+            elif 'metrics:' in line:
+                insert_dns_metric(uid, line)
             elif currently_parsing == '':
                 pass
             elif ', status: ' in line:
@@ -315,11 +334,13 @@ def insert_lookups(uid):
 create_measurements_table()
 create_lookups_table()
 create_qlogs_table()
+create_dns_metrics_table()
+
 for p in pages:
     # cache warming
     print(f'{p}: cache warming')
-    status = perform_page_load(p, 1)
-    if status == 0:
+    cw_status = perform_page_load(p, 1)
+    if cw_status == 0:
         # performance measurement if cache warming succeeded
         print(f'{p}: measuring')
         perform_page_load(p)
