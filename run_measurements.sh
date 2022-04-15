@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [[ $EUID -ne 0 ]]; then
+    echo "$0 is not running as root. Try using sudo."
+    exit 2
+fi
+
 echo "starting measurement process..."
 date
 
@@ -42,12 +47,15 @@ while read upstream; do
 				resolver="${p}://${https_upstream}"
 			elif [ $p = "quic" ]
 			then
-			  if [ $qport = "8853" ]
-			  then
-			    resolver="quic://${upstream}:8853"
-			  else
-				  resolver="quic://${upstream}:784"
-				fi
+					if [ $qport = "8853" ]
+					then
+						resolver="quic://${upstream}:8853"
+					elif [ $qport = "853" ]
+					then
+						resolver="quic://${upstream}:853"
+					else
+						resolver="quic://${upstream}:784"
+					fi
 			else
 				resolver="${p}://${upstream}"
 			fi
